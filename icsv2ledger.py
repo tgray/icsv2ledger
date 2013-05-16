@@ -291,6 +291,38 @@ def parse_args_and_config_file():
 
     return args
 
+cleanRe = re.compile(r'[^\d\.]')
+signRe = re.compile(r'[\(\-]')
+
+def clean_money(value):
+    '''Do some intelligent things with money values.
+
+    Convert negative values denoted by parens to a minus sign.
+    Remove symbol if embedded into the value, i.e -$10 => -10.'''
+
+    if len(value) == 0:
+        return value
+    clean_value = float(cleanRe.sub('', value))
+    g = signRe.search(value)
+    if g:
+        sign = -1
+    else:
+        sign = 1
+    return "{:.2f}".format(sign * clean_value)
+
+def clean_dollars(value):
+    '''Put the $ in between any negative and the amount.
+
+    I don't like the format '$ -100' or '$ 100'.  I prefer '$100' and '-$100'.
+    This function just slices off any negatives out front and sticks in the $
+    sign.'''
+    if len(value) == 0:
+        return value
+    if value[0] == '-':
+        value = '-$' + value[1:]
+    else:
+        value = '$' + value
+    return value
 
 class Entry:
     """
@@ -325,10 +357,23 @@ class Entry:
 
         self.credit = get_field_at_index(fields, options.credit)
         self.debit = get_field_at_index(fields, options.debit)
+        self.credit = clean_money(self.credit)
+        self.debit = clean_money(self.debit)
 
         self.credit_account = options.account
         self.currency = options.currency
         self.cleared_character = options.cleared_character
+
+        # I don't like the format used with American money.  So if the currency
+        # is '$', reformat the value so any negative signs are put in front of
+        # the $ sign.  Then set the currency to nothing because I find the
+        # default template looks odd.  This also avoids the double $ signs like
+        # I was getting originally if the input CSV file had a $ in the
+        # amount.
+        if self.currency == '$':
+            self.credit = clean_dollars(self.credit)
+            self.debit = clean_dollars(self.debit)
+            self.currency = ''
 
         if options.template_file:
             with open(options.template_file, 'r') as f:
